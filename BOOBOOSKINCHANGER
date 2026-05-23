@@ -1,169 +1,378 @@
--- Rivals Skin Changer | WindUI Local Script
--- Place inside: Players > LocalPlayer > PlayerScripts
 
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+--// Lem Skin Changer Optimized
+--// Old WindUI Style
+--// Keybind: K
 
-local Players       = game:GetService("Players")
-local LocalPlayer   = Players.LocalPlayer
-local ViewModels    = LocalPlayer.PlayerScripts.Assets.ViewModels
-local WeaponsFolder = ViewModels.Weapons
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
 
--- all skin cases (everything except Weapons folder)
-local function getSkinCases()
-    local list = {}
-    for _, child in ipairs(ViewModels:GetChildren()) do
-        if child.Name ~= "Weapons" then
-            table.insert(list, child.Name)
-        end
-    end
-    table.sort(list)
-    return list
-end
+local player = Players.LocalPlayer
 
--- all skins inside a case (just all children, no name matching)
-local function getSkinsInCase(caseName)
-    local list = {}
-    local caseFolder = ViewModels:FindFirstChild(caseName)
-    if not caseFolder then return list end
-    for _, child in ipairs(caseFolder:GetChildren()) do
-        table.insert(list, child.Name)
-    end
-    table.sort(list)
-    return list
-end
+--// WIND UI
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
 
--- weapons you own
-local function getOwnedWeapons()
-    local list = {}
-    for _, w in ipairs(WeaponsFolder:GetChildren()) do
-        table.insert(list, w.Name)
-    end
-    table.sort(list)
-    return list
-end
-
--- apply: clone chosen skin into chosen weapon
-local function applySkin(caseName, skinName, weaponName)
-    local skinObj   = ViewModels:FindFirstChild(caseName) and ViewModels[caseName]:FindFirstChild(skinName)
-    local weaponObj = WeaponsFolder:FindFirstChild(weaponName)
-    if not skinObj or not weaponObj then return false end
-    weaponObj:ClearAllChildren()
-    for _, v in pairs(skinObj:GetChildren()) do
-        v:Clone().Parent = weaponObj
-    end
-    return true
-end
-
--- ─── UI ───────────────────────────────────────────────────────────────────────
 local Window = WindUI:CreateWindow({
-    Title = "Rivals Skin Changer",
-    Icon = "shirt",
-    Author = "by Lem6",
-    Folder = "RivalsSkinChanger",
-    Size = UDim2.fromOffset(580, 460),
-    ToggleKey = Enum.KeyCode.RightShift,
+    Title = "Lem Skin Changer",
+    Icon = "sparkles",
+    Author = "lem6",
+    Folder = "LemSkinChanger",
+    Size = UDim2.fromOffset(700, 540),
     Transparent = true,
     Theme = "Dark",
-    Resizable = true,
+    SideBarWidth = 220,
 })
 
-local Tab = Window:Tab({ Title = "Skins", Icon = "layers" })
+--// TOGGLE UI
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
 
-local selectedCase   = nil
-local selectedSkin   = nil
-local selectedWeapon = nil
+    if input.KeyCode == Enum.KeyCode.K then
+        Window:Toggle()
+    end
+end)
 
-local skinCases    = getSkinCases()
-local ownedWeapons = getOwnedWeapons()
+-- ═══════════════════════════════════════════════
+-- FULL SKINS
+-- ═══════════════════════════════════════════════
 
-local SkinDropdown -- forward declare
+local SkinLists = {
+    ["Assault Rifle"] = {"Default", "AK-47", "AUG", "Tommy Gun", "Boneclaw Rifle", "Gingerbread AUG", "AKEY-47", "100K Visits", "10 Billion Visits", "Phoenix Rifle"},
+    ["Bow"] = {"Default", "Compound Bow", "Raven Bow", "Dream Bow", "Bat Bow", "Frostbite Bow", "Beloved Bow", "Balloon Bow", "Glorious Bow", "Key Bow", "Arch Bow"},
+    ["Burst Rifle"] = {"Default", "Electro Burst", "Aqua Burst", "FAMAS", "Spectral Burst", "Pine Burst"},
+    ["Crossbow"] = {"Default", "Pixel Crossbow", "Harpoon Crossbow", "Violin Crossbow", "Crossbone", "Frostbite Crossbow", "Arch Crossbow", "Glorious Crossbow"},
+    ["Distortion"] = {"Default", "Plasma Distortion", "Magma Distortion", "Cyber Distortion", "Expirement D15", "Sleighstortion"},
+    ["Energy Rifle"] = {"Default", "Hacker Rifle", "Hydro Rifle", "Void Rifle", "Soul Rifle", "New Years Energy Rifle"},
+    ["Flamethrower"] = {"Default", "Pixel Flamethrower", "Lamethrower", "Glitterthrower", "Jack O' Thrower", "Snowblower", "Keythrower", "Rainbowthrower"},
+    ["Grenade Launcher"] = {"Default", "Swashbuckler", "Uranium Launcher", "Gearnade Launcher", "Skull Grenade Launcher", "Snowball Launcher"},
+    ["Gunblade"] = {"Default", "Hyper Gunblade", "Crude Gunblade", "Gunsaw", "Boneblade", "Elf's Gunblade"},
+    ["Minigun"] = {"Default", "Lasergun 3000", "Pixel Minigun", "Fighter Jet", "Pumpkin Minigun", "Wrapped Minigun"},
+    ["Paintball Gun"] = {"Default", "Slime Gun", "Boba Gun", "Ketchup Gun", "Brain Gun", "Snowball Gun"},
+    ["RPG"] = {"Default", "Nuke Launcher", "Spaceship Launcher", "Squid Launcher", "Pumpkin Launcher", "Firework Launcher"},
+    ["Shotgun"] = {"Default", "Balloon Shotgun", "Hyper Shotgun", "Cactus Shotgun", "Broomstick", "Wrapped Shotgun"},
+    ["Sniper"] = {"Default", "Pixel Sniper", "Hyper Sniper", "Event Horizon", "Eyething Sniper", "Gingerbread Sniper", "Keyper", "Glorious Sniper"},
+    ["Daggers"] = {"Default", "Aces", "Paper Planes", "Shurikens", "Bat Daggers", "Cookies", "Crystal Daggers", "Keynais"},
+    ["Energy Pistols"] = {"Default", "Void Pistols", "Hydro Pistols", "Soul Pistols", "New Years Energy Pistols"},
+    ["Exogun"] = {"Default", "Singularity", "Raygun", "Repulsor", "Exogourd", "Midnight Festive Exogun"},
+    ["Flare Gun"] = {"Default", "Firework Gun", "Dynamite Gun", "Banana Flare", "Vexed Flare Gun", "Wrapped Flare Gun"},
+    ["Handgun"] = {"Default", "Blaster", "Hand Gun", "Gumball Handgun", "Pumpkin Handgun", "Gingerbread Handgun"},
+    ["Revolver"] = {"Default", "Desert Eagle", "Sheriff", "Peppergun", "Boneclaw Revolver", "Peppermint Sheriff"},
+    ["Shorty"] = {"Default", "Not So Shorty", "Lovely Shorty", "Balloon Shorty", "Demon Shorty", "Wrapped Shorty"},
+    ["Slingshot"] = {"Default", "Stick", "Goal Post", "Harp", "Boneshot", "Reindeer Slingshot", "Lucky Horseshoe"},
+    ["Spray"] = {"Default", "Lovely Spray", "Nail Gun", "Bottle Spray", "Boneclaw Spray", "Pine Spray", "Key Spray"},
+    ["Uzi"] = {"Default", "Water Uzi", "Electro Uzi", "Money Gun", "Demon Uzi", "Pine Uzi"},
+    ["Warper"] = {"Default", "Glitter Warper", "Arcane Warper", "Hotel Bell", "Experiment W4", "Frost Warper"},
+    ["Battle Axe"] = {"Default", "The Shred", "Ban Axe", "Cerulean Axe", "Mimic Axe", "Nordic Axe"},
+    ["Chainsaw"] = {"Default", "Blobsaw", "Handsaws", "Mega Drill", "Buzzsaw", "Festive Buzzsaw"},
+    ["Fists"] = {"Default", "Boxing Gloves", "Brass Knuckles", "Fists Of Hurt", "Pumpkin Claws", "Festive Fists"},
+    ["Katana"] = {"Default", "Saber", "Lightning Bolt", "Stellar Katana", "Evil Trident", "New Years Katana", "Keytana", "Arch Katana", "Crystal Katana", "Pixel Katana", "Glorious Katana"},
+    ["Knife"] = {"Default", "Chancla", "Karambit", "Balisong", "Machete", "Candy Cane", "Keylisong", "Keyrambit", "Caladbolg"},
+    ["Riot Shield"] = {"Default", "Door", "Energy Shield", "Masterpiece", "Tombstone Shield", "Sled"},
+    ["Scythe"] = {"Default", "Scythe of Death", "Anchor", "Sakura Scythe", "Bat Scythe", "Cryo Scythe", "Crystal Scythe", "Keythe", "Bug Net", "Arch Scythe"},
+    ["Trowel"] = {"Default", "Plastic Shovel", "Garden Shovel", "Paintbrush", "Pumpkin Carver", "Snow Shovel"},
+    ["Flashbang"] = {"Default", "Disco Ball", "Camera", "Lightbulb", "Skullbang", "Shining Star"},
+    ["Freeze Ray"] = {"Default", "Temporal Ray", "Bubble Ray", "Gum Ray", "Spider Ray", "Wrapped Freeze Ray"},
+    ["Grenade"] = {"Default", "Whoopee Cushion", "Water Balloon", "Dynamite", "Soul Grenade", "Jingle Grenade"},
+    ["Jump Pad"] = {"Default", "Trampoline", "Bounce House", "Shady Chicken Sandwich", "Spider Web", "Jolly Man"},
+    ["Medkit"] = {"Default", "Sandwich", "Laptop", "Medkitty", "Bucket of Candy", "Milk & Cookies", "Box of Chocolates", "Briefcase"},
+    ["Molotov"] = {"Default", "Coffee", "Torch", "Lava Lamp", "Vexed Candle", "Hot Coals", "Arch Molotov"},
+    ["Satchel"] = {"Default", "Advanced Satchel", "Notebook Satchel", "Bag O' Money", "Potion Satchel", "Suspicious Gift"},
+    ["Smoke Grenade"] = {"Default", "Emoji Cloud", "Balance", "Hourglass", "Eyeball", "Snowglobe"},
+    ["Subspace Tripmine"] = {"Default", "Don't Press", "Spring", "DIY Tripmine", "Trick or Treat", "Dev In the Box", "Pot O Keys"},
+    ["War Horn"] = {"Default", "Trumpet", "Megaphone", "Air Horn", "Boneclaw Horn", "Mammoth Horn"},
+    ["Warpstone"] = {"Default", "Cyber Warpstone", "Teleport Disc", "Electropunk Warpstone", "Warpbone", "Warpstar"},
+    ["Permafrost"] = {"Default", "Snowman Permafrost", "Ice Permafrost", "Glorious Permafrost"},
+}
 
--- 1. Pick skin case
-local CaseDropdown = Tab:Dropdown({
-    Title = "Skin Case",
-    Desc = "Pick a skin case",
-    Values = skinCases,
-    Value = skinCases[1] or "None",
-    Multi = false,
-    AllowNone = false,
-    Callback = function(option)
-        selectedCase = option
-        selectedSkin = nil
-        -- show ALL skins inside this case
-        local skins = getSkinsInCase(option)
-        if #skins == 0 then skins = {"(empty case)"} end
-        SkinDropdown:Refresh(skins)
-        SkinDropdown:Select(skins[1])
-        selectedSkin = skins[1]
-    end,
-})
-selectedCase = skinCases[1]
+local WrapList = {
+    "None","Gold","Diamond","Midas Touch","Community Wrap","Blush Wrapping",
+    "Brain","Crystalliz","Damascus","Black Damascus",".exe wrap",
+    "Groove","Hollow Wrap","Hesper","Hyperdrive","Gingerbread",
+    "Neon Lights","Hologram Arena","Sunset","Pink Lemonade",
+    "Lovely Leopard","Dawn","Spectral","Danger","Termination",
+    "Moonstone","Starfall","Black Glass","Rift Wrap","Starblaze",
+    "Maganite","Watermelon","Reptile","Water","OranGG","A5",
+    "Cheese","Nova","Supernova","Glass","Mesh","Meat Wrap",
+    "Black Dark Wrap","Cardinal","Pixel Camo","Nauseite","Sensite",
+    "Urban Camo","Frosted","Slime Wrap","Carpet Wrap","Cross Wrap",
+    "Mainframe Wrap","Honeycomb Wrap","Black Opal Wrap","Patriot",
+    "PB&J Wrap","Digital Camo","Street Camo","Ocean Camo",
+    "Circuit","Clouds","Woven","Ladybug"
+}
 
--- 2. Pick skin (ALL items inside the case, no filtering)
-local initialSkins = getSkinsInCase(selectedCase or "")
-if #initialSkins == 0 then initialSkins = {"(empty case)"} end
+-- ═══════════════════════════════════════════════
+-- SAVE / LOAD
+-- ═══════════════════════════════════════════════
 
-SkinDropdown = Tab:Dropdown({
-    Title = "Skin",
-    Desc = "All skins inside the selected case",
-    Values = initialSkins,
-    Value = initialSkins[1],
-    Multi = false,
-    AllowNone = false,
-    Callback = function(option)
-        selectedSkin = option
-    end,
-})
-selectedSkin = initialSkins[1]
+local SAVE_FILE = "LemSkinConfig.json"
 
--- 3. Pick YOUR weapon to apply it to
-local WeaponDropdown = Tab:Dropdown({
-    Title = "Your Weapon",
-    Desc = "Which weapon to apply the skin to",
-    Values = ownedWeapons,
-    Value = ownedWeapons[1] or "None",
-    Multi = false,
-    AllowNone = false,
-    Callback = function(option)
-        selectedWeapon = option
-    end,
-})
-selectedWeapon = ownedWeapons[1]
+_G.EquippedData = _G.EquippedData or {}
 
--- Apply
-Tab:Button({
-    Title = "Apply Skin",
-    Desc = "Clones selected skin into your selected weapon",
-    Callback = function()
-        if not selectedCase or not selectedSkin or not selectedWeapon then
-            WindUI:Notification({ Title = "Skin Changer", Desc = "Fill in all 3 dropdowns first!", Icon = "alert-circle", Time = 3 })
-            return
+for weapon in pairs(SkinLists) do
+    if not _G.EquippedData[weapon] then
+        _G.EquippedData[weapon] = {
+            Skin = "Default",
+            Wrap = "None"
+        }
+    end
+end
+
+local function SaveConfig()
+    writefile(SAVE_FILE, HttpService:JSONEncode(_G.EquippedData))
+end
+
+local function LoadConfig()
+    if isfile(SAVE_FILE) then
+        local data = HttpService:JSONDecode(readfile(SAVE_FILE))
+
+        for weapon, info in pairs(data) do
+            if _G.EquippedData[weapon] then
+                _G.EquippedData[weapon] = info
+            end
         end
-        if applySkin(selectedCase, selectedSkin, selectedWeapon) then
-            WindUI:Notification({ Title = "Skin Changer", Desc = selectedSkin .. " → " .. selectedWeapon .. " done!", Icon = "check-circle", Time = 3 })
-        else
-            WindUI:Notification({ Title = "Skin Changer", Desc = "Failed — check skin/weapon names.", Icon = "x-circle", Time = 3 })
+    end
+end
+
+LoadConfig()
+
+-- ═══════════════════════════════════════════════
+-- MODULES
+-- ═══════════════════════════════════════════════
+
+local function robust_require(module)
+    local ok, result = pcall(require, module)
+
+    if ok then
+        return result
+    end
+
+    for _, v in pairs(getgc(true)) do
+        if type(v) == "table" then
+            if tostring(module):find("CosmeticLibrary") and v.Cosmetics then
+                return v
+            end
+
+            if tostring(module):find("ClientViewModel") and v.GetWrap then
+                return v
+            end
         end
-    end,
+    end
+
+    return nil
+end
+
+local CosmeticLibrary
+local ReplicatedClass
+local ClientViewModel
+
+task.spawn(function()
+    CosmeticLibrary = robust_require(
+        ReplicatedStorage.Modules:WaitForChild("CosmeticLibrary")
+    )
+
+    ReplicatedClass = robust_require(
+        ReplicatedStorage.Modules:WaitForChild("ReplicatedClass")
+    )
+
+    local Modules = player.PlayerScripts.Modules
+
+    ClientViewModel = robust_require(
+        Modules.ClientReplicatedClasses.ClientFighter.ClientItem.ClientViewModel
+    )
+
+    if not CosmeticLibrary or not ClientViewModel then
+        warn("Failed loading modules")
+        return
+    end
+
+    local function getCosmeticData(name, cType)
+        local base = CosmeticLibrary.Cosmetics[name]
+
+        if not base then
+            return nil
+        end
+
+        local data = table.clone(base)
+        data.Name = name
+        data.Type = cType
+
+        return data
+    end
+
+    --// WRAP HOOK
+    local oldGetWrap = ClientViewModel.GetWrap
+
+    ClientViewModel.GetWrap = function(self)
+        local weapon = self.ClientItem and self.ClientItem.Name
+
+        if weapon and _G.EquippedData[weapon] then
+            local wrap = _G.EquippedData[weapon].Wrap
+
+            if wrap ~= "None" then
+                return getCosmeticData(wrap, "Wrap")
+            end
+        end
+
+        return oldGetWrap(self)
+    end
+
+    --// SKIN HOOK
+    local oldNew = ClientViewModel.new
+
+    ClientViewModel.new = function(replicatedData, clientItem)
+        pcall(function()
+            local weapon = clientItem.Name
+
+            if not weapon then
+                return
+            end
+
+            local skin = _G.EquippedData[weapon].Skin
+
+            if skin and skin ~= "Default" then
+                local cosData = getCosmeticData(skin, "Skin")
+
+                if cosData then
+                    local dataKey = ReplicatedClass:ToEnum("Data")
+                    local skinKey = ReplicatedClass:ToEnum("Skin")
+                    local nameKey = ReplicatedClass:ToEnum("Name")
+
+                    replicatedData[dataKey] = replicatedData[dataKey] or {}
+                    replicatedData[dataKey][skinKey] = cosData
+                    replicatedData[dataKey][nameKey] = skin
+                end
+            end
+        end)
+
+        local vm = oldNew(replicatedData, clientItem)
+
+        task.delay(0.1, function()
+            pcall(function()
+                if vm and vm._UpdateWrap then
+                    vm:_UpdateWrap()
+                end
+            end)
+        end)
+
+        return vm
+    end
+end)
+
+-- ═══════════════════════════════════════════════
+-- UI
+-- ═══════════════════════════════════════════════
+
+local MainTab = Window:Tab({
+    Title = "Skin Changer",
+    Icon = "sparkles"
 })
 
-Tab:Divider()
+local ConfigTab = Window:Tab({
+    Title = "Config",
+    Icon = "folder"
+})
 
-Tab:Button({
-    Title = "Refresh",
-    Desc = "Re-scans ViewModels",
+--// LOAD UI SLOWLY (FIX FREEZE)
+
+local weaponNames = {}
+
+for weapon in pairs(SkinLists) do
+    table.insert(weaponNames, weapon)
+end
+
+-- Sort alphabetically
+
+table.sort(weaponNames)
+
+-- Create one weapon every frame
+
+task.spawn(function()
+    for _, weapon in ipairs(weaponNames) do
+        local skins = SkinLists[weapon]
+
+        local Section = MainTab:Section({
+            Title = weapon
+        })
+
+        Section:Dropdown({
+            Title = "Skin",
+            Values = skins,
+            Default = _G.EquippedData[weapon].Skin,
+            Callback = function(value)
+                _G.EquippedData[weapon].Skin = value
+
+                pcall(function()
+                    CosmeticLibrary.Equip(weapon, "Skin", value)
+                end)
+            end
+        })
+
+        Section:Dropdown({
+            Title = "Wrap",
+            Values = WrapList,
+            Default = _G.EquippedData[weapon].Wrap,
+            Callback = function(value)
+                _G.EquippedData[weapon].Wrap = value
+            end
+        })
+
+        --// IMPORTANT
+        task.wait()
+    end
+end)
+
+-- ═══════════════════════════════════════════════
+-- CONFIG
+-- ═══════════════════════════════════════════════
+
+ConfigTab:Button({
+    Title = "Save Config",
     Callback = function()
-        skinCases = getSkinCases()
-        ownedWeapons = getOwnedWeapons()
-        CaseDropdown:Refresh(skinCases)
-        WeaponDropdown:Refresh(ownedWeapons)
-        WindUI:Notification({ Title = "Skin Changer", Desc = "Refreshed!", Icon = "refresh-cw", Time = 3 })
-    end,
+        SaveConfig()
+
+        WindUI:Notify({
+            Title = "Lem Skin Changer",
+            Content = "Saved Config",
+            Duration = 2
+        })
+    end
 })
 
-WindUI:Notification({
-    Title = "Skin Changer Loaded",
-    Desc = "RightShift to toggle. " .. #ownedWeapons .. " weapon(s) owned.",
-    Icon = "shirt",
-    Time = 5,
+ConfigTab:Button({
+    Title = "Load Config",
+    Callback = function()
+        LoadConfig()
+
+        WindUI:Notify({
+            Title = "Lem Skin Changer",
+            Content = "Loaded Config",
+            Duration = 2
+        })
+    end
 })
+
+ConfigTab:Button({
+    Title = "Apply All",
+    Callback = function()
+        task.spawn(function()
+            for weapon, info in pairs(_G.EquippedData) do
+                if info.Skin ~= "Default" then
+                    pcall(function()
+                        CosmeticLibrary.Equip(weapon, "Skin", info.Skin)
+                    end)
+                end
+
+                task.wait()
+            end
+        end)
+
+        WindUI:Notify({
+            Title = "Lem Skin Changer",
+            Content = "Applied All Skins",
+            Duration = 2
+        })
+    end
+})
+
+print("[+] Optimized Lem Skin Changer Loaded")
