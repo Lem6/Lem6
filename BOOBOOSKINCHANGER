@@ -4,16 +4,16 @@
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 -- ─── References ───────────────────────────────────────────────────────────────
-local Players    = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local ViewModels  = LocalPlayer.PlayerScripts.Assets.ViewModels
-local WeaponsFolder = ViewModels.Weapons  -- ViewModels.Weapons["Battle Axe"] etc.
+local Players       = game:GetService("Players")
+local LocalPlayer   = Players.LocalPlayer
+local ViewModels    = LocalPlayer.PlayerScripts.Assets.ViewModels
+local WeaponsFolder = ViewModels.Weapons -- only weapons the player owns
 
--- ─── Helper: get all Skin Case folder names ───────────────────────────────────
+-- ─── Get skin cases (everything in ViewModels except Weapons) ─────────────────
 local function getSkinCases()
     local cases = {}
     for _, child in ipairs(ViewModels:GetChildren()) do
-        if child.Name ~= "Weapons" then  -- skip the real weapons folder
+        if child.Name ~= "Weapons" then
             table.insert(cases, child.Name)
         end
     end
@@ -21,44 +21,47 @@ local function getSkinCases()
     return cases
 end
 
--- ─── Helper: get all weapon names from a given skin case ─────────────────────
-local function getWeaponsInCase(caseName)
+-- ─── Get weapons the player OWNS (children of ViewModels.Weapons) ─────────────
+local function getOwnedWeapons()
+    local owned = {}
+    for _, weapon in ipairs(WeaponsFolder:GetChildren()) do
+        table.insert(owned, weapon.Name)
+    end
+    table.sort(owned)
+    return owned
+end
+
+-- ─── Get skins available in a case FOR weapons the player owns ────────────────
+-- i.e. children of the skin case whose name matches something in Weapons
+local function getMatchingSkins(caseName)
     local caseFolder = ViewModels:FindFirstChild(caseName)
     if not caseFolder then return {} end
-    local weapons = {}
-    for _, child in ipairs(caseFolder:GetChildren()) do
-        table.insert(weapons, child.Name)
-    end
-    table.sort(weapons)
-    return weapons
-end
-
--- ─── Core: apply one skin weapon → real weapon ────────────────────────────────
--- skin  = ViewModels["Skin Case 2"]["Ban Axe"]
--- weapon = ViewModels.Weapons["Battle Axe"]  (same weapon, different name possible)
-local function applyOneSkin(skinWeaponObj, realWeaponObj)
-    if not skinWeaponObj or not realWeaponObj then return end
-    realWeaponObj:ClearAllChildren()
-    for _, v in pairs(skinWeaponObj:GetChildren()) do
-        v:Clone().Parent = realWeaponObj
-    end
-end
-
--- ─── Apply ALL weapons inside a skin case ─────────────────────────────────────
--- Matches by name: skin case weapon name must match real weapon name
-local function applyAllInCase(caseName)
-    local caseFolder = ViewModels:FindFirstChild(caseName)
-    if not caseFolder then return 0 end
-
-    local count = 0
-    for _, skinWeapon in pairs(caseFolder:GetChildren()) do
-        local realWeapon = WeaponsFolder:FindFirstChild(skinWeapon.Name)
-        if realWeapon then
-            applyOneSkin(skinWeapon, realWeapon)
-            count += 1
+    local owned = getOwnedWeapons()
+    local matches = {}
+    for _, skinWeapon in ipairs(caseFolder:GetChildren()) do
+        if table.find(owned, skinWeapon.Name) then
+            table.insert(matches, skinWeapon.Name)
         end
     end
-    return count
+    table.sort(matches)
+    return matches
+end
+
+-- ─── Core apply ───────────────────────────────────────────────────────────────
+-- skin  = ViewModels["Skin Case 2"]["Ban Axe"]
+-- weapon = ViewModels.Weapons["Ban Axe"]
+local function applyOneSkin(caseName, weaponName)
+    local caseFolder = ViewModels:FindFirstChild(caseName)
+    if not caseFolder then return false end
+    local skinWeapon = caseFolder:FindFirstChild(weaponName)
+    local realWeapon = WeaponsFolder:FindFirstChild(weaponName)
+    if not skinWeapon or not realWeapon then return false end
+
+    realWeapon:ClearAllChildren()
+    for _, v in pairs(skinWeapon:GetChildren()) do
+        v:Clone().Parent = realWeapon
+    end
+    return true
 end
 
 -- ─── Build UI ─────────────────────────────────────────────────────────────────
@@ -81,26 +84,34 @@ local Tab = Window:Tab({
 
 -- ─── State ────────────────────────────────────────────────────────────────────
 local selectedCase   = nil
-local selectedWeapon = nil  -- "All" or a specific weapon name
-
-local skinCases = getSkinCases()
+local selectedWeapon = nil
+local skinCases      = getSkinCases()
 
 -- ─── Skin Case Dropdown ───────────────────────────────────────────────────────
+local WeaponDropdown -- forward declare so CaseDropdown callback can use it
+
 local CaseDropdown = Tab:Dropdown({
     Title = "Skin Case",
-    Desc = "Select which skin case to pull from (e.g. Skin Case 2)",
+    Desc = "Pick a skin case (e.g. Skin Case 2)",
     Values = skinCases,
     Value = skinCases[1] or "None",
     Multi = false,
     AllowNone = false,
     Callback = function(option)
         selectedCase = option
-        -- refresh weapon list for this case
-        local weapons = getWeaponsInCase(option)
-        table.insert(weapons, 1, "All Weapons")
-        WeaponDropdown:Refresh(weapons)
-        WeaponDropdown:Select("All Weapons")
-        selectedWeapon = "All Weapons"
+        selectedWeapon = nil
+
+        -- show only weapons YOU OWN that exist in this skin case
+        local matches = getMatchingSkins(option)
+        if #matches == 0 then
+            matches = {"(no owned weapons in this case)"}
+        else
+            table.insert(matches, 1, "All")
+        end
+
+        WeaponDropdown:Refresh(matches)
+        WeaponDropdown:Select(matches[1])
+        selectedWeapon = matches[1]
     end,
 })
 
@@ -108,36 +119,45 @@ if skinCases[1] then
     selectedCase = skinCases[1]
 end
 
--- ─── Weapon Dropdown ──────────────────────────────────────────────────────────
-local initialWeapons = getWeaponsInCase(selectedCase or "")
-table.insert(initialWeapons, 1, "All Weapons")
+-- ─── Weapon Dropdown (owned weapons that have a skin in the selected case) ─────
+local initialMatches = getMatchingSkins(selectedCase or "")
+if #initialMatches == 0 then
+    initialMatches = {"(no owned weapons in this case)"}
+else
+    table.insert(initialMatches, 1, "All")
+end
 
-local WeaponDropdown = Tab:Dropdown({
-    Title = "Weapon",
-    Desc = "Choose a specific weapon or apply all at once",
-    Values = initialWeapons,
-    Value = "All Weapons",
+WeaponDropdown = Tab:Dropdown({
+    Title = "Your Weapons",
+    Desc = "Only shows weapons you own that have a skin in the selected case",
+    Values = initialMatches,
+    Value = initialMatches[1],
     Multi = false,
     AllowNone = false,
     Callback = function(option)
         selectedWeapon = option
     end,
 })
-selectedWeapon = "All Weapons"
+selectedWeapon = initialMatches[1]
 
 -- ─── Apply Button ─────────────────────────────────────────────────────────────
 Tab:Button({
     Title = "Apply Skin",
-    Desc = "Clones skin children into the real weapon(s) in Weapons folder",
+    Desc = "Applies the skin from the selected case to your weapon(s)",
     Callback = function()
-        if not selectedCase then
-            WindUI:Notification({ Title = "Skin Changer", Desc = "Select a skin case first!", Icon = "alert-circle", Time = 3 })
+        if not selectedCase or not selectedWeapon then
+            WindUI:Notification({ Title = "Skin Changer", Desc = "Select a case and weapon first!", Icon = "alert-circle", Time = 3 })
             return
         end
 
-        if selectedWeapon == "All Weapons" then
-            -- Apply all weapons in this skin case
-            local count = applyAllInCase(selectedCase)
+        if selectedWeapon == "All" then
+            local matches = getMatchingSkins(selectedCase)
+            local count = 0
+            for _, wName in ipairs(matches) do
+                if applyOneSkin(selectedCase, wName) then
+                    count += 1
+                end
+            end
             WindUI:Notification({
                 Title = "Skin Changer",
                 Desc = "Applied " .. selectedCase .. " to " .. count .. " weapon(s)!",
@@ -145,45 +165,44 @@ Tab:Button({
                 Time = 4,
             })
         else
-            -- Apply just one weapon
-            local caseFolder = ViewModels:FindFirstChild(selectedCase)
-            local skinWeapon = caseFolder and caseFolder:FindFirstChild(selectedWeapon)
-            local realWeapon = WeaponsFolder:FindFirstChild(selectedWeapon)
-
-            if not skinWeapon then
-                WindUI:Notification({ Title = "Skin Changer", Desc = "Skin weapon not found in case!", Icon = "x-circle", Time = 3 })
-                return
+            if applyOneSkin(selectedCase, selectedWeapon) then
+                WindUI:Notification({
+                    Title = "Skin Changer",
+                    Desc = "Applied " .. selectedCase .. " → " .. selectedWeapon,
+                    Icon = "check-circle",
+                    Time = 3,
+                })
+            else
+                WindUI:Notification({
+                    Title = "Skin Changer",
+                    Desc = "Failed — weapon not found in case or Weapons folder.",
+                    Icon = "x-circle",
+                    Time = 3,
+                })
             end
-            if not realWeapon then
-                WindUI:Notification({ Title = "Skin Changer", Desc = "Real weapon '" .. selectedWeapon .. "' not found in Weapons folder!", Icon = "x-circle", Time = 3 })
-                return
-            end
-
-            applyOneSkin(skinWeapon, realWeapon)
-            WindUI:Notification({
-                Title = "Skin Changer",
-                Desc = "Applied " .. selectedCase .. " → " .. selectedWeapon .. "!",
-                Icon = "check-circle",
-                Time = 3,
-            })
         end
     end,
 })
 
--- ─── Apply ALL Cases to ALL Weapons ───────────────────────────────────────────
+-- ─── Apply ALL cases to ALL owned weapons ─────────────────────────────────────
 Tab:Divider()
 
 Tab:Button({
-    Title = "Apply ALL Cases → ALL Weapons",
-    Desc = "Loops every skin case and applies every weapon skin it can match",
+    Title = "Apply ALL Cases → ALL Your Weapons",
+    Desc = "Every skin case, every weapon you own — applied all at once",
     Callback = function()
         local total = 0
         for _, caseName in ipairs(skinCases) do
-            total += applyAllInCase(caseName)
+            local matches = getMatchingSkins(caseName)
+            for _, wName in ipairs(matches) do
+                if applyOneSkin(caseName, wName) then
+                    total += 1
+                end
+            end
         end
         WindUI:Notification({
             Title = "Skin Changer",
-            Desc = "Done! Applied skins across " .. #skinCases .. " cases (" .. total .. " total).",
+            Desc = "Done! " .. total .. " skin(s) applied across all cases.",
             Icon = "check-circle",
             Time = 5,
         })
@@ -192,21 +211,23 @@ Tab:Button({
 
 -- ─── Refresh ──────────────────────────────────────────────────────────────────
 Tab:Button({
-    Title = "Refresh Lists",
-    Desc = "Re-scans ViewModels for skin cases and weapons",
+    Title = "Refresh",
+    Desc = "Re-scans ViewModels and your owned weapons",
     Callback = function()
         skinCases = getSkinCases()
         CaseDropdown:Refresh(skinCases)
         if skinCases[1] then
             CaseDropdown:Select(skinCases[1])
         end
-        WindUI:Notification({ Title = "Skin Changer", Desc = "Lists refreshed! " .. #skinCases .. " cases found.", Icon = "refresh-cw", Time = 3 })
+        WindUI:Notification({ Title = "Skin Changer", Desc = "Refreshed! " .. #skinCases .. " cases found.", Icon = "refresh-cw", Time = 3 })
     end,
 })
 
+-- ─── Owned weapons info ───────────────────────────────────────────────────────
+local owned = getOwnedWeapons()
 WindUI:Notification({
     Title = "Skin Changer Loaded",
-    Desc = "Press RightShift to toggle. " .. #skinCases .. " skin cases found.",
+    Desc = "RightShift to toggle. " .. #owned .. " weapon(s) owned, " .. #skinCases .. " skin case(s) found.",
     Icon = "shirt",
-    Time = 5,
+    Time = 6,
 })
