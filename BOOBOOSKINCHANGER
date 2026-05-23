@@ -1,1 +1,244 @@
+-- Rivals Skin Changer | WindUI Local Script
+-- Place inside: Players > LocalPlayer > PlayerScripts
 
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+-- References
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local ViewModels = LocalPlayer.PlayerScripts.Assets.ViewModels
+
+-- ─── Helper: collect all skin names from ViewModels ───────────────────────────
+local function getSkinNames()
+    local names = {}
+    for _, child in ipairs(ViewModels:GetChildren()) do
+        table.insert(names, child.Name)
+    end
+    table.sort(names) -- alphabetical order
+    return names
+end
+
+-- ─── Helper: apply a skin to a weapon ─────────────────────────────────────────
+local function applySkin(skinName, weapon)
+    local skin = ViewModels:FindFirstChild(skinName)
+    if not skin or not weapon then return end
+
+    weapon:ClearAllChildren()
+    for _, v in ipairs(skin:GetChildren()) do
+        local clone = v:Clone()
+        clone.Parent = weapon
+    end
+end
+
+-- ─── Helper: get all weapons from ViewModels ──────────────────────────────────
+local function getWeaponNames()
+    -- Weapons live as sub-folders/models inside ViewModels
+    -- Adjust this if your structure differs
+    local weapons = {}
+    for _, child in ipairs(ViewModels:GetChildren()) do
+        -- Each child IS a skin folder; weapons are the grandchildren
+        for _, weapon in ipairs(child:GetChildren()) do
+            if not table.find(weapons, weapon.Name) then
+                table.insert(weapons, weapon.Name)
+            end
+        end
+        break -- we only need one skin's weapon list as reference
+    end
+    table.sort(weapons)
+    return weapons
+end
+
+-- ─── Build UI ─────────────────────────────────────────────────────────────────
+local Window = WindUI:CreateWindow({
+    Title = "Rivals Skin Changer",
+    Icon = "shirt",
+    Author = "Local Script",
+    Folder = "RivalsSkinChanger",
+    Size = UDim2.fromOffset(580, 460),
+    ToggleKey = Enum.KeyCode.RightShift,
+    Transparent = true,
+    Theme = "Dark",
+    Resizable = true,
+})
+
+local Tab = Window:Tab({
+    Title = "Skins",
+    Icon = "layers",
+})
+
+-- ─── Current selection state ──────────────────────────────────────────────────
+local selectedSkin = nil
+local selectedWeapon = nil
+
+local skinNames   = getSkinNames()
+local weaponNames = getWeaponNames()
+
+-- ─── Skin Dropdown ────────────────────────────────────────────────────────────
+local SkinDropdown = Tab:Dropdown({
+    Title = "Select Skin",
+    Desc = "Choose a skin from ViewModels",
+    Values = skinNames,
+    Value = skinNames[1] or "None",
+    Multi = false,
+    AllowNone = false,
+    Callback = function(option)
+        selectedSkin = option
+    end,
+})
+
+-- auto-select first skin
+if skinNames[1] then
+    selectedSkin = skinNames[1]
+end
+
+-- ─── Weapon Dropdown ─────────────────────────────────────────────────────────
+local WeaponDropdown = Tab:Dropdown({
+    Title = "Select Weapon",
+    Desc = "Choose which weapon to apply the skin to",
+    Values = weaponNames,
+    Value = weaponNames[1] or "None",
+    Multi = false,
+    AllowNone = false,
+    Callback = function(option)
+        selectedWeapon = option
+    end,
+})
+
+if weaponNames[1] then
+    selectedWeapon = weaponNames[1]
+end
+
+-- ─── Apply Button ─────────────────────────────────────────────────────────────
+Tab:Button({
+    Title = "Apply Skin",
+    Desc = "Apply selected skin to selected weapon",
+    Callback = function()
+        if not selectedSkin then
+            WindUI:Notification({
+                Title = "Skin Changer",
+                Desc = "Please select a skin first!",
+                Icon = "alert-circle",
+                Time = 3,
+            })
+            return
+        end
+
+        local skin = ViewModels:FindFirstChild(selectedSkin)
+        if not skin then
+            WindUI:Notification({
+                Title = "Skin Changer",
+                Desc = "Skin not found: " .. tostring(selectedSkin),
+                Icon = "x-circle",
+                Time = 3,
+            })
+            return
+        end
+
+        -- Find the weapon model inside the skin folder
+        local weapon = skin:FindFirstChild(selectedWeapon)
+        if weapon then
+            -- Apply the skin: clone all parts into the weapon
+            local targetWeapon = LocalPlayer.PlayerScripts.Assets.ViewModels:FindFirstChild(selectedSkin)
+            if targetWeapon then
+                local targetWeaponModel = targetWeapon:FindFirstChild(selectedWeapon)
+                if targetWeaponModel then
+                    targetWeaponModel:ClearAllChildren()
+                    for _, v in ipairs(weapon:GetChildren()) do
+                        v:Clone().Parent = targetWeaponModel
+                    end
+                end
+            end
+        else
+            -- Fallback: set skin on the whole ViewModel as per screenshot logic
+            local skinModel = ViewModels:FindFirstChild(selectedSkin)
+            if skinModel then
+                skinModel:ClearAllChildren()
+                for _, v in ipairs(skin:GetChildren()) do
+                    v:Clone().Parent = skinModel
+                end
+            end
+        end
+
+        WindUI:Notification({
+            Title = "Skin Changer",
+            Desc = "Applied '" .. selectedSkin .. "' skin!",
+            Icon = "check-circle",
+            Time = 3,
+        })
+    end,
+})
+
+-- ─── Apply to ALL Weapons Button ──────────────────────────────────────────────
+Tab:Button({
+    Title = "Apply to ALL Weapons",
+    Desc = "Sets selected skin across every weapon in ViewModels",
+    Callback = function()
+        if not selectedSkin then
+            WindUI:Notification({
+                Title = "Skin Changer",
+                Desc = "Please select a skin first!",
+                Icon = "alert-circle",
+                Time = 3,
+            })
+            return
+        end
+
+        local skin = ViewModels:FindFirstChild(selectedSkin)
+        if not skin then
+            WindUI:Notification({
+                Title = "Skin Changer",
+                Desc = "Skin not found!",
+                Icon = "x-circle",
+                Time = 3,
+            })
+            return
+        end
+
+        -- Replicate the screenshot logic:
+        -- for i, v in ipairs(skin:GetChildren()) do
+        --     v:Clone().Parent = weapon
+        -- end
+        -- but for EVERY weapon in ViewModels
+        for _, weaponFolder in ipairs(ViewModels:GetChildren()) do
+            if weaponFolder.Name ~= selectedSkin then
+                weaponFolder:ClearAllChildren()
+                for _, v in ipairs(skin:GetChildren()) do
+                    v:Clone().Parent = weaponFolder
+                end
+            end
+        end
+
+        WindUI:Notification({
+            Title = "Skin Changer",
+            Desc = "Applied '" .. selectedSkin .. "' to ALL weapons!",
+            Icon = "check-circle",
+            Time = 4,
+        })
+    end,
+})
+
+-- ─── Divider ──────────────────────────────────────────────────────────────────
+Tab:Divider()
+
+-- ─── Refresh skins list button ────────────────────────────────────────────────
+Tab:Button({
+    Title = "Refresh Skin List",
+    Desc = "Re-scans ViewModels for new skins",
+    Callback = function()
+        local newSkins = getSkinNames()
+        SkinDropdown:Refresh(newSkins)
+        WindUI:Notification({
+            Title = "Skin Changer",
+            Desc = "Skin list refreshed! Found " .. #newSkins .. " skins.",
+            Icon = "refresh-cw",
+            Time = 3,
+        })
+    end,
+})
+
+WindUI:Notification({
+    Title = "Skin Changer Loaded",
+    Desc = "Press RightShift to toggle UI. " .. #skinNames .. " skins found.",
+    Icon = "shirt",
+    Time = 5,
+})
